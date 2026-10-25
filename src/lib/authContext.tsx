@@ -44,34 +44,26 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const signUp = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
-    if (error) return { error: error.message };
-
-    // If this is the admin email, set admin role via edge function
-    // The edge function validates the password server-side
-    if (email === ADMIN_EMAIL && data.user) {
+    if (email === ADMIN_EMAIL) {
       try {
         const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const res = await fetch(`${supabaseUrl}/functions/v1/admin-ops/set-admin`, {
+        const response = await fetch(`${supabaseUrl}/functions/v1/admin-ops/set-admin`, {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ email, password }),
         });
-        if (res.ok) {
-          // Sign out and back in to refresh JWT with admin metadata
-          await supabase.auth.signOut();
-          await supabase.auth.signInWithPassword({ email, password });
-        } else {
-          // Password didn't match server-side — the account is created but admin role is not granted
-          await supabase.auth.signOut();
-          return { error: "Invalid credentials" };
-        }
+
+        if (!response.ok) return { error: "Не удалось создать админский аккаунт" };
+
+        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
+        return { error: signInError?.message ?? null };
       } catch {
-        // Admin setup can be retried later
+        return { error: "Не удалось подключиться к серверу" };
       }
     }
 
-    return { error: null };
+    const { error } = await supabase.auth.signUp({ email, password });
+    return { error: error?.message ?? null };
   };
 
   const signOut = async () => {

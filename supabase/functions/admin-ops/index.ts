@@ -38,11 +38,43 @@ Deno.serve(async (req: Request) => {
         );
       }
 
-      const { data, error } = await supabase.rpc("set_admin_role", { p_email: email });
+      const { data: existingUserData } = await supabase.auth.admin.getUserByEmail(email);
+      let userId = existingUserData.user?.id;
 
-      if (error) {
+      if (userId) {
+        const { error: updateError } = await supabase.auth.admin.updateUserById(userId, {
+          password,
+          email_confirm: true,
+        });
+
+        if (updateError) {
+          return new Response(
+            JSON.stringify({ error: "Не удалось подготовить админский аккаунт" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+      } else {
+        const { data: createdUser, error: createError } = await supabase.auth.admin.createUser({
+          email,
+          password,
+          email_confirm: true,
+        });
+
+        if (createError || !createdUser.user) {
+          return new Response(
+            JSON.stringify({ error: "Не удалось создать админский аккаунт" }),
+            { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
+          );
+        }
+
+        userId = createdUser.user.id;
+      }
+
+      const { error: roleError } = await supabase.rpc("set_admin_role", { p_email: email });
+
+      if (roleError || !userId) {
         return new Response(
-          JSON.stringify({ error: error.message }),
+          JSON.stringify({ error: "Не удалось назначить права администратора" }),
           { status: 500, headers: { ...corsHeaders, "Content-Type": "application/json" } }
         );
       }
