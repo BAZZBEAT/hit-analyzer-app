@@ -7,7 +7,7 @@ const corsHeaders = {
 };
 
 const ADMIN_EMAIL = "admin@musicai.app";
-const ADMIN_PASSWORD = "BazzBeat_ProAdmin_2026!";
+const ADMIN_PASSWORD = "BazzBeat_ProAdmin_2026!#";
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") {
