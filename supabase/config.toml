@@ -1,4 +1,1 @@
 project_id = ""
-
-[functions.admin-ops]
-verify_jwt = false

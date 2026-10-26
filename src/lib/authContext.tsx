@@ -14,6 +14,9 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
+const hasAdminRole = (user: User | null) =>
+  user?.app_metadata?.role === "admin";
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [user, setUser] = useState<User | null>(null);
@@ -24,7 +27,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(({ data }) => {
       setSession(data.session);
       setUser(data.session?.user ?? null);
-      setIsAdmin(data.session?.user?.email === ADMIN_EMAIL);
+      setIsAdmin(hasAdminRole(data.session?.user ?? null));
       setLoading(false);
     });
 
@@ -32,37 +35,33 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       (async () => {
         setSession(newSession);
         setUser(newSession?.user ?? null);
-        setIsAdmin(newSession?.user?.email === ADMIN_EMAIL);
+        setIsAdmin(hasAdminRole(newSession?.user ?? null));
         setLoading(false);
       })();
     });
   }, []);
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth.signInWithPassword({
+      email: email.trim().toLowerCase(),
+      password,
+    });
     return { error: error?.message ?? null };
   };
 
   const signUp = async (email: string, password: string) => {
-    if (email === ADMIN_EMAIL) {
-      try {
-        const supabaseUrl = import.meta.env.VITE_SUPABASE_URL;
-        const response = await fetch(`${supabaseUrl}/functions/v1/admin-ops/set-admin`, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ email, password }),
-        });
-
-        if (!response.ok) return { error: "Не удалось создать админский аккаунт" };
-
-        const { error: signInError } = await supabase.auth.signInWithPassword({ email, password });
-        return { error: signInError?.message ?? null };
-      } catch {
-        return { error: "Не удалось подключиться к серверу" };
-      }
+    const normalizedEmail = email.trim().toLowerCase();
+    if (normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
+      return {
+        error:
+          "Регистрация администратора через сайт отключена. Выберите «Войти»; если аккаунт ещё не создан, создайте его через Supabase Dashboard.",
+      };
     }
 
-    const { error } = await supabase.auth.signUp({ email, password });
+    const { error } = await supabase.auth.signUp({
+      email: normalizedEmail,
+      password,
+    });
     return { error: error?.message ?? null };
   };
 
