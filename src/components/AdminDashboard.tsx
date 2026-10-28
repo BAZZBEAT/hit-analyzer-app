@@ -33,20 +33,25 @@ export default function AdminDashboard({ onSignOut }: { onSignOut: () => void })
 
   const loadData = useCallback(async () => {
     setLoading(true);
-    const [statsRes, logsRes] = await Promise.all([
-      supabase.rpc("get_admin_stats"),
-      supabase.rpc("get_recent_logs", { p_limit: 15 }),
-    ]);
+    try {
+      const [statsRes, logsRes] = await Promise.all([
+        supabase.rpc("get_admin_stats"),
+        supabase.rpc("get_recent_logs", { p_limit: 15 }),
+      ]);
 
-    if (statsRes.data) {
-      const s = statsRes.data as AdminStats;
-      setStats(s);
-      setLimit(s.daily_limit);
+      if (statsRes.data) {
+        const s = statsRes.data as AdminStats;
+        setStats(s);
+        setLimit(s.daily_limit);
+      }
+      if (logsRes.data) {
+        setLogs(logsRes.data as LogEntry[]);
+      }
+    } catch (e) {
+      console.error("Ошибка загрузки данных администратора:", e);
+    } finally {
+      setLoading(false);
     }
-    if (logsRes.data) {
-      setLogs(logsRes.data as LogEntry[]);
-    }
-    setLoading(false);
   }, []);
 
   useEffect(() => {
@@ -155,7 +160,7 @@ export default function AdminDashboard({ onSignOut }: { onSignOut: () => void })
               {statCards.map((card) => (
                 <div
                   key={card.label}
-                  className={`rounded-2xl bg-white/[0.03] p-5 ring-1 ring-white/10`}
+                  className="rounded-2xl bg-white/[0.03] p-5 ring-1 ring-white/10"
                 >
                   <div className={`mb-3 flex h-10 w-10 items-center justify-center rounded-xl ${card.bg} ring-1 ${card.ring}`}>
                     <card.icon className={`h-5 w-5 ${card.color}`} />
@@ -211,42 +216,26 @@ export default function AdminDashboard({ onSignOut }: { onSignOut: () => void })
             <div className="rounded-2xl bg-white/[0.03] p-6 ring-1 ring-white/10">
               <div className="flex items-center gap-2 mb-4">
                 <Clock className="h-4 w-4 text-cyan-400" />
-                <h2 className="text-sm font-semibold text-white/90">Журнал сканирований</h2>
+                <h2 className="text-sm font-semibold text-white/90">Логи активности ИИ</h2>
               </div>
-
-              {logs.length === 0 ? (
-                <div className="flex flex-col items-center py-8 text-center">
-                  <XCircle className="h-8 w-8 text-white/20 mb-2" />
-                  <p className="text-sm text-white/30">Записей пока нет</p>
-                </div>
-              ) : (
-                <div className="space-y-2 max-h-80 overflow-y-auto">
-                  {logs.map((log) => (
-                    <div
-                      key={log.id}
-                      className="flex items-center gap-3 rounded-xl bg-black/20 px-4 py-3"
-                    >
-                      <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-cyan-500/10 ring-1 ring-cyan-500/20">
-                        <Activity className="h-4 w-4 text-cyan-400" />
+              
+              <div className="space-y-2 mt-4 max-h-60 overflow-y-auto pr-2">
+                {logs.length === 0 ? (
+                  <p className="text-xs text-white/30 text-center py-4">История активности пуста</p>
+                ) : (
+                  logs.map((log) => (
+                    <div key={log.id} className="flex flex-col sm:flex-row justify-between items-start sm:items-center p-3 bg-white/[0.02] rounded-xl border border-white/5 gap-1">
+                      <div>
+                        <div className="text-xs font-medium text-white/80">{log.user_email || "Анонимный пользователь"}</div>
+                        <div className="text-[11px] text-white/40 font-mono mt-0.5">Файл: {log.file_name || "Не указан"}</div>
                       </div>
-                      <div className="flex-1 min-w-0">
-                        <p className="text-sm font-medium text-white/80 truncate">
-                          {log.file_name ?? "Безымянный файл"}
-                        </p>
-                        <p className="text-xs text-white/30 truncate">{log.user_email ?? log.user_id}</p>
+                      <div className="text-[10px] text-white/30 tabular-nums">
+                        {new Date(log.created_at).toLocaleString("ru-RU")}
                       </div>
-                      <span className="text-xs text-white/30 shrink-0 tabular-nums">
-                        {new Date(log.created_at).toLocaleString("ru-RU", {
-                          day: "2-digit",
-                          month: "2-digit",
-                          hour: "2-digit",
-                          minute: "2-digit",
-                        })}
-                      </span>
                     </div>
-                  ))}
-                </div>
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </>
         )}
