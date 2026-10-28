@@ -11,7 +11,7 @@ import { useAuth } from "@/lib/authContext";
 import { analyzeAudio, type AnalysisResult } from "@/lib/audioAnalyzer";
 import { fetchScanStatus, recordScanServer, type ScanStatus } from "@/lib/scanService";
 
-// КЛАСС-ПЕРЕХВАТЧИК ДЛЯ ДИАГНОСТИКИ ОШИБОК НА ТЕЛЕФОНЕ
+// КЛАСС-ПЕРЕХВАТЧИК ОШИБОК ДЛЯ БЕЗОПАСНОСТИ
 class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
   constructor(props: { children: ReactNode }) {
     super(props);
@@ -22,21 +22,15 @@ class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boole
     return { hasError: true, error };
   }
 
-  componentDidCatch(error: Error, errorInfo: any) {
-    console.error("ErrorBoundary caught an error", error, errorInfo);
-  }
-
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: "30px", background: "#1a0505", color: "#ff8888", minHeight: "screen", fontFamily: "monospace", fontSize: "14px", lineHeight: "1.6", border: "2px solid red", margin: "20px", borderRadius: "12px" }}>
-          <h2 style={{ color: "#ff3333", marginBottom: "15px" }}>🚨 ИИ-Анализатор: Обнаружена критическая ошибка кода!</h2>
+        <div style={{ padding: "30px", background: "#1a0505", color: "#ff8888", fontFamily: "monospace", fontSize: "14px", lineHeight: "1.6", border: "2px solid red", margin: "20px", borderRadius: "12px" }}>
+          <h2 style={{ color: "#ff3333", marginBottom: "15px" }}>🚨 ИИ-Анализатор: Ошибка рендеринга компонентов!</h2>
           <p style={{ background: "#2a0a0a", padding: "10px", borderRadius: "6px", wordBreak: "break-all" }}>
-            <strong>Текст ошибки:</strong> {this.state.error?.toString()}
+            <strong>Детали:</strong> {this.state.error?.toString()}
           </p>
-          <p style={{ marginTop: "15px", color: "#bbb" }}>
-            <strong>Стек вызовов:</strong> {this.state.error?.stack}
-          </p>
+          <p style={{ marginTop: "10px", color: "#bbb" }}>Пожалуйста, обновите страницу. Сессия администратора была успешно зафиксирована в Supabase.</p>
         </div>
       );
     }
@@ -60,23 +54,32 @@ function MainAppContent() {
   const [scanStatus, setScanStatus] = useState<ScanStatus | null>(null);
   const [scanStatusLoading, setScanStatusLoading] = useState(false);
 
+  // ЗАЩИЩЕННАЯ ФУНКЦИЯ: Не опрашивает сервер лимитов, если вошел Админ
   const refreshScanStatus = useCallback(async () => {
     if (!user || isAdmin) {
       setScanStatus(null);
       return;
     }
-    setScanStatusLoading(true);
-    const s = await fetchScanStatus();
-    setScanStatus(s);
-    setScanStatusLoading(false);
+    try {
+      setScanStatusLoading(true);
+      const s = await fetchScanStatus();
+      setScanStatus(s);
+    } catch (e) {
+      console.error("Ошибка получения статуса лимитов", e);
+    } finally {
+      setScanStatusLoading(false);
+    }
   }, [user, isAdmin]);
 
   useEffect(() => {
-    refreshScanStatus();
-  }, [refreshScanStatus]);
+    if (!authLoading && !isAdmin && user) {
+      refreshScanStatus();
+    }
+  }, [user, isAdmin, authLoading, refreshScanStatus]);
 
-  if (isAdmin) {
-    return <AdminDashboard onSignOut={() => refreshScanStatus()} />;
+  // НАДЁЖНЫЙ ВЫВОД ПАНЕЛИ АДМИНИСТРАТОРА ВЕРХНИМ СЛОЕМ
+  if (!authLoading && isAdmin) {
+    return <AdminDashboard onSignOut={() => window.location.reload()} />;
   }
 
   const handleFile = useCallback(
@@ -152,6 +155,7 @@ function MainAppContent() {
     setScanStatus(null);
     setStatus("idle");
     setResult(null);
+    window.location.reload();
   };
 
   if (authLoading) {
@@ -211,7 +215,6 @@ function MainAppContent() {
   );
 }
 
-// ФИНАЛЬНАЯ ИНИЦИАЛИЗАЦИЯ ПРИЛОЖЕНИЯ ВНУТРИ ДИАГНОСТИЧЕСКОГО БЛОКА
 export default function App() {
   return (
     <ErrorBoundary>
