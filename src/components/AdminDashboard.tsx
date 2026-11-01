@@ -30,25 +30,32 @@ export default function AdminDashboard({ onSignOut }: { onSignOut: () => void })
   const [loading, setLoading] = useState(true);
   const [savingLimit, setSavingLimit] = useState(false);
   const [saveMsg, setSaveMsg] = useState("");
+  const [loadError, setLoadError] = useState("");
 
   const loadData = useCallback(async () => {
     setLoading(true);
+    setLoadError("");
+
     try {
       const [statsRes, logsRes] = await Promise.all([
         supabase.rpc("get_admin_stats"),
         supabase.rpc("get_recent_logs", { p_limit: 15 }),
       ]);
 
-      if (statsRes.data) {
-        const s = statsRes.data as AdminStats;
-        setStats(s);
-        setLimit(s.daily_limit);
+      if (statsRes.error || logsRes.error) {
+        throw new Error("Не удалось загрузить данные панели");
       }
-      if (logsRes.data) {
-        setLogs(logsRes.data as LogEntry[]);
+
+      const statsData = Array.isArray(statsRes.data) ? statsRes.data[0] : statsRes.data;
+      if (statsData) {
+        const nextStats = statsData as AdminStats;
+        setStats(nextStats);
+        setLimit(nextStats.daily_limit);
       }
-    } catch (e) {
-      console.error("Ошибка загрузки данных администратора:", e);
+
+      setLogs((logsRes.data ?? []) as LogEntry[]);
+    } catch {
+      setLoadError("Не удалось загрузить панель администратора. Обновите страницу и войдите снова.");
     } finally {
       setLoading(false);
     }
@@ -152,6 +159,17 @@ export default function AdminDashboard({ onSignOut }: { onSignOut: () => void })
         {loading ? (
           <div className="flex items-center justify-center py-20">
             <div className="h-8 w-8 rounded-full border-2 border-cyan-500/20 border-t-cyan-400 animate-spin" />
+          </div>
+        ) : loadError ? (
+          <div className="rounded-2xl bg-red-500/[0.06] p-6 text-center ring-1 ring-red-500/20">
+            <XCircle className="mx-auto h-8 w-8 text-red-400" />
+            <p className="mt-3 text-sm text-red-200/80">{loadError}</p>
+            <button
+              onClick={loadData}
+              className="mt-5 rounded-xl bg-white/10 px-5 py-2.5 text-sm font-semibold text-white transition-colors hover:bg-white/15"
+            >
+              Повторить
+            </button>
           </div>
         ) : (
           <>

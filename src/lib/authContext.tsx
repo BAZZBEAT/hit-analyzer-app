@@ -14,18 +14,7 @@ interface AuthContextValue {
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 
-// Исправленная функция проверки роли с резервным определением по вашей личной почте
-const hasAdminRole = (user: User | null) => {
-  if (!user || !user.email) return false;
-  const emailNormalized = user.email.trim().toLowerCase();
-  
-  // Защищенное сопоставление: проверяем роль в метаданных ИЛИ точное совпадение с вашей админской почтой
-  return (
-    user.app_metadata?.role === "admin" || 
-    emailNormalized === "beatmakerbazzbeat@gmail.com" ||
-    (typeof ADMIN_EMAIL === "string" && emailNormalized === ADMIN_EMAIL.toLowerCase())
-  );
-};
+const hasAdminRole = (user: User | null): boolean => user?.app_metadata?.role === "admin";
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -67,21 +56,17 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const signUp = async (email: string, password: string) => {
     const normalizedEmail = email.trim().toLowerCase();
-    if (
-      normalizedEmail === "beatmakerbazzbeat@gmail.com" || 
-      (typeof ADMIN_EMAIL === "string" && normalizedEmail === ADMIN_EMAIL.toLowerCase())
-    ) {
-      return {
-        error:
-          "Регистрация администратора через сайт отключена. Выберите «Войти»; если аккаунт ещё не создан, создайте его через Supabase Dashboard.",
-      };
-    }
 
     try {
       const { error } = await supabase.auth.signUp({
         email: normalizedEmail,
         password,
       });
+
+      if (!error && normalizedEmail === ADMIN_EMAIL.toLowerCase()) {
+        await supabase.auth.refreshSession();
+      }
+
       return { error: error?.message ?? null };
     } catch (e) {
       return { error: e instanceof Error ? e.message : "Ошибка регистрации" };

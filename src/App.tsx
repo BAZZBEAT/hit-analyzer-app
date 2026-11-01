@@ -11,29 +11,33 @@ import { useAuth } from "@/lib/authContext";
 import { analyzeAudio, type AnalysisResult } from "@/lib/audioAnalyzer";
 import { fetchScanStatus, recordScanServer, type ScanStatus } from "@/lib/scanService";
 
-// КЛАСС-ПЕРЕХВАТЧИК ОШИБОК ДЛЯ БЕЗОПАСНОСТИ
-class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean; error: Error | null }> {
-  constructor(props: { children: ReactNode }) {
-    super(props);
-    this.state = { hasError: false, error: null };
-  }
+class ErrorBoundary extends Component<{ children: ReactNode }, { hasError: boolean }> {
+  state = { hasError: false };
 
-  static getDerivedStateFromError(error: Error) {
-    return { hasError: true, error };
+  static getDerivedStateFromError(): { hasError: boolean } {
+    return { hasError: true };
   }
 
   render() {
     if (this.state.hasError) {
       return (
-        <div style={{ padding: "30px", background: "#1a0505", color: "#ff8888", fontFamily: "monospace", fontSize: "14px", lineHeight: "1.6", border: "2px solid red", margin: "20px", borderRadius: "12px" }}>
-          <h2 style={{ color: "#ff3333", marginBottom: "15px" }}>🚨 ИИ-Анализатор: Ошибка рендеринга компонентов!</h2>
-          <p style={{ background: "#2a0a0a", padding: "10px", borderRadius: "6px", wordBreak: "break-all" }}>
-            <strong>Детали:</strong> {this.state.error?.toString()}
-          </p>
-          <p style={{ marginTop: "10px", color: "#bbb" }}>Пожалуйста, обновите страницу. Сессия администратора была успешно зафиксирована в Supabase.</p>
+        <div className="min-h-screen bg-[#0a0e1a] px-6 flex items-center justify-center text-center text-white">
+          <div className="max-w-sm">
+            <h1 className="text-xl font-bold">Не удалось открыть сайт</h1>
+            <p className="mt-3 text-sm text-white/50">
+              Обновите страницу. Если проблема повторится, выйдите из аккаунта и войдите снова.
+            </p>
+            <button
+              onClick={() => window.location.reload()}
+              className="mt-6 rounded-xl bg-gradient-to-r from-cyan-500 to-blue-600 px-5 py-3 text-sm font-semibold text-white"
+            >
+              Обновить страницу
+            </button>
+          </div>
         </div>
       );
     }
+
     return this.props.children;
   }
 }
@@ -206,9 +210,17 @@ function MainAppContent() {
         </nav>
 
         <main className="mx-auto max-w-2xl px-5 py-10">
-          {status === "idle" && <DropZone onFileSelect={handleFile} />}
+          {status === "idle" && (
+            <DropZone
+              onFile={handleFile}
+              disabled={scanStatusLoading}
+              fileName={fileName}
+            />
+          )}
           {status === "loading" && <LoadingState />}
-          {status === "done" && result && <ResultsPanel result={result} onReset={reset} onPremiumClick={openPremiumModal} />}
+          {status === "done" && result && (
+            <ResultsPanel result={result} onPremiumFeature={openPremiumModal} />
+          )}
         </main>
       </div>
     </div>

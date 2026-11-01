@@ -10,4 +10,4 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   },
 });
 
-export const ADMIN_EMAIL = "admin@musicai.app";
+export const ADMIN_EMAIL = "beatmakerbazzbeat@gmail.com";
