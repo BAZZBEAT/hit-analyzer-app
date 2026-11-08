@@ -1,14 +1,17 @@
 import { useEffect, useState } from "react";
 import { Loader2 } from "lucide-react";
 
+interface LoadingStateProps {
+  modelProgress: number | null;
+}
+
 const MESSAGES = [
   "Декодирование аудиопотока...",
-  "Извлечение музыкального вектора MERT...",
-  "Анализ спектральных характеристик...",
-  "Сравнение с базой хитов...",
+  "Нейросеть распознаёт звуки...",
+  "Анализ громкости и динамики...",
 ];
 
-export default function LoadingState() {
+export default function LoadingState({ modelProgress }: LoadingStateProps) {
   const [msgIndex, setMsgIndex] = useState(0);
 
   useEffect(() => {
@@ -17,6 +20,11 @@ export default function LoadingState() {
     }, 800);
     return () => clearInterval(interval);
   }, []);
+
+  const isDownloading = modelProgress !== null && modelProgress < 100;
+  const statusText = isDownloading
+    ? `Загрузка ИИ-модели (один раз): ${Math.round(modelProgress)}%`
+    : MESSAGES[msgIndex];
 
   return (
     <div className="flex flex-col items-center gap-6 py-12 animate-[fadeIn_0.5s_ease-out]">
@@ -27,14 +35,19 @@ export default function LoadingState() {
       </div>
 
       <div className="text-center space-y-2">
-        <p className="text-white/90 font-medium">Локальный ИИ анализирует аудиопоток</p>
-        <p className="text-sm text-cyan-400/70 transition-all duration-300 min-h-[20px]">
-          {MESSAGES[msgIndex]}
-        </p>
+        <p className="text-white/90 font-medium">Локальный ИИ анализирует звуки трека</p>
+        <p className="text-sm text-cyan-400/70 transition-all duration-300 min-h-[20px]">{statusText}</p>
       </div>
 
       <div className="w-48 h-1 rounded-full bg-white/5 overflow-hidden">
-        <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+        {isDownloading ? (
+          <div
+            className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full transition-all duration-300"
+            style={{ width: `${modelProgress}%` }}
+          />
+        ) : (
+          <div className="h-full bg-gradient-to-r from-cyan-500 to-blue-500 rounded-full animate-pulse" style={{ width: "60%" }} />
+        )}
       </div>
     </div>
   );

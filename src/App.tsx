@@ -18,6 +18,7 @@ function MainApp() {
   const [result, setResult] = useState<AnalysisResult | null>(null);
   const [fileName, setFileName] = useState<string | undefined>(undefined);
   const [error, setError] = useState("");
+  const [modelProgress, setModelProgress] = useState<number | null>(null);
   const [authModalOpen, setAuthModalOpen] = useState(false);
 
   const handleFile = useCallback(
@@ -25,8 +26,9 @@ function MainApp() {
       setFileName(file.name);
       setStatus("loading");
       setError("");
+      setModelProgress(null);
       try {
-        const res = await analyzeAudio(file);
+        const res = await analyzeAudio(file, setModelProgress);
         if (user) {
           void recordScan(file.name);
         }
@@ -136,7 +138,7 @@ function MainApp() {
           <div className="relative rounded-3xl bg-white/[0.02] p-6 sm:p-8 ring-1 ring-white/10 backdrop-blur-sm shadow-2xl">
             {status === "idle" && <DropZone onFile={handleFile} disabled={false} fileName={fileName} />}
 
-            {status === "loading" && <LoadingState />}
+            {status === "loading" && <LoadingState modelProgress={modelProgress} />}
 
             {status === "error" && (
               <div className="flex flex-col items-center gap-4 py-10 text-center">

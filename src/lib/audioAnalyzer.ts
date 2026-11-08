@@ -1,20 +1,16 @@
-import { HITS_DATABASE, type Hit } from "./hitsDatabase";
+import type { SoundScore } from "./musicModel";
+import { SOUND_LABELS, soundNameRu } from "./soundLabels";
 import { computeLoudnessMetrics, type LoudnessMetrics } from "./loudnessAnalyzer";
 
-export interface Match {
-  title: string;
-  score: number;
-  genre: string;
-  cover: string;
+export interface SoundShare {
+  name: string;
+  percent: number;
 }
 
 export interface AnalysisResult {
-  vector: number[];
-  vectorPreview: string;
+  topSounds: SoundShare[];
   tags: string[];
   description: string;
-  matches: Match[];
-  energy: number;
   duration: number;
   sampleRate: number;
   fileName: string;
@@ -22,18 +18,12 @@ export interface AnalysisResult {
   loudness: LoudnessMetrics;
 }
 
-function cosineSimilarity(a: number[], b: number[]): number {
-  let dot = 0;
-  let magA = 0;
-  let magB = 0;
-  for (let i = 0; i < a.length; i++) {
-    dot += a[i] * b[i];
-    magA += a[i] * a[i];
-    magB += b[i] * b[i];
-  }
-  if (magA === 0 || magB === 0) return 0;
-  return dot / (Math.sqrt(magA) * Math.sqrt(magB));
-}
+const MODEL_SAMPLE_RATE = 16000;
+const WINDOW_SECONDS = 10;
+const MAX_WINDOWS = 4;
+const TOP_SOUNDS = 10;
+const MIN_TAG_SCORE = 0.1;
+const MAX_TAGS = 6;
 
 function formatFileSize(bytes: number): string {
   if (bytes < 1024) return `${bytes} B`;
@@ -41,75 +31,121 @@ function formatFileSize(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-export async function analyzeAudio(file: File): Promise<AnalysisResult> {
-  const audioCtx = new (window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext)();
-  const arrayBuffer = await file.arrayBuffer();
-  const decodedData = await audioCtx.decodeAudioData(arrayBuffer);
-  const rawAudio = decodedData.getChannelData(0);
+async function renderMono16k(decoded: AudioBuffer): Promise<Float32Array> {
+  const offline = new OfflineAudioContext(1, Math.ceil(decoded.duration * MODEL_SAMPLE_RATE), MODEL_SAMPLE_RATE);
+  const source = offline.createBufferSource();
+  source.buffer = decoded;
+  source.connect(offline.destination);
+  source.start();
+  const rendered = await offline.startRendering();
+  return rendered.getChannelData(0);
+}
 
-  const embeddingDim = 768;
-  const step = Math.floor(rawAudio.length / embeddingDim);
-  const extractedVector = new Array(embeddingDim).fill(0);
+function pickWindows(samples: Float32Array): Float32Array[] {
+  const windowLength = WINDOW_SECONDS * MODEL_SAMPLE_RATE;
+  if (samples.length <= windowLength) return [samples];
+  const count = Math.min(MAX_WINDOWS, Math.ceil(samples.length / windowLength));
+  const maxStart = samples.length - windowLength;
+  const windows: Float32Array[] = [];
+  for (let i = 0; i < count; i++) {
+    const start = count === 1 ? 0 : Math.round((maxStart * i) / (count - 1));
+    windows.push(samples.subarray(start, start + windowLength));
+  }
+  return windows;
+}
 
-  for (let i = 0; i < embeddingDim; i++) {
-    let sum = 0;
-    for (let j = 0; j < 15; j++) {
-      const idx = (i * step + j) % rawAudio.length;
-      sum += rawAudio[idx] || 0;
+async function averageSoundScores(samples: Float32Array, onModelProgress?: (percent: number) => void): Promise<SoundScore[]> {
+  const { classifySound } = await import("./musicModel");
+  const windows = pickWindows(samples);
+  const totals = new Map<string, number>();
+  for (const window of windows) {
+    const scores = await classifySound(window, onModelProgress);
+    for (const { label, score } of scores) {
+      totals.set(label, (totals.get(label) ?? 0) + score);
     }
-    extractedVector[i] = Math.tanh(sum * 2.5);
+  }
+  return [...totals]
+    .map(([label, total]) => ({ label, score: total / windows.length }))
+    .sort((a, b) => b.score - a.score);
+}
+
+function buildTags(scores: SoundScore[]): string[] {
+  return scores
+    .filter((s) => s.label !== "Music" && SOUND_LABELS[s.label] && s.score >= MIN_TAG_SCORE)
+    .slice(0, MAX_TAGS)
+    .map((s) => soundNameRu(s.label));
+}
+
+function buildDescription(scores: SoundScore[]): string {
+  const scoreOf = (label: string) => scores.find((s) => s.label === label)?.score ?? 0;
+  const topInGroup = (group: "genre" | "mood" | "instrument", limit: number) =>
+    scores
+      .filter((s) => s.label !== "Music" && SOUND_LABELS[s.label]?.group === group && s.score >= MIN_TAG_SCORE)
+      .slice(0, limit);
+
+  if (scoreOf("Music") < 0.2) {
+    return "В треке мало музыки: в основном слышны другие звуки или речь.";
   }
 
-  let energy = 0;
-  for (let k = 0; k < rawAudio.length; k += 100) {
-    energy += Math.abs(rawAudio[k]);
+  const sentences: string[] = [];
+  const genre = topInGroup("genre", 1)[0];
+  if (genre) {
+    sentences.push(`Жанр по звучанию: ${soundNameRu(genre.label)} (${Math.round(genre.score * 100)}%).`);
   }
-  energy = energy / (rawAudio.length / 100);
 
-  const tags =
-    energy > 0.15
-      ? ["Energetic Dance", "Electronic Beats"]
-      : energy > 0.08
-        ? ["Melodic Pop", "Radio Sound"]
-        : ["Atmospheric Lo-Fi", "Chill Vibe"];
+  const mood = topInGroup("mood", 1)[0];
+  if (mood) {
+    sentences.push(`Настроение: ${soundNameRu(mood.label).toLowerCase()}.`);
+  }
 
-  const matches: Match[] = HITS_DATABASE.map((hit: Hit) => {
-    const hitVector = new Array(768).fill(0).map((_, idx) => Math.sin(idx * hit.seed));
-    const rawScore = cosineSimilarity(extractedVector, hitVector);
-    const finalPercent = 72 + Math.abs(rawScore) * 25;
-    return {
-      title: hit.title,
-      score: finalPercent,
-      genre: hit.genre,
-      cover: hit.cover,
-    };
-  }).sort((a, b) => b.score - a.score);
+  const instruments = topInGroup("instrument", 3);
+  if (instruments.length > 0) {
+    sentences.push(`Основные инструменты: ${instruments.map((s) => soundNameRu(s.label).toLowerCase()).join(", ")}.`);
+  }
 
-  const bestHit = matches[0];
-  const description = `Композиция имеет стилистику (${tags.join(", ")}). По геометрии ИИ-вектора трек имеет максимальное совпадение на уровне ${bestHit.score.toFixed(1)}% с хитом «${bestHit.title}» (${bestHit.genre}).`;
+  const vocalScore = Math.max(scoreOf("Singing"), scoreOf("Male singing"), scoreOf("Female singing"));
+  const rapScore = scoreOf("Rapping");
+  if (rapScore >= 0.2) {
+    sentences.push("В треке есть читка (рэп).");
+  } else if (vocalScore >= 0.2) {
+    sentences.push("В треке есть вокал.");
+  } else {
+    sentences.push("Вокал почти не слышен, трек инструментальный.");
+  }
 
-  const vectorPreview = `[${extractedVector.slice(0, 6).map((v) => v.toFixed(3)).join(", ")}, ... всего 768 чисел]`;
+  return sentences.join(" ");
+}
 
-  // Compute EBU R128 loudness metrics across all channels
+export async function analyzeAudio(
+  file: File,
+  onModelProgress?: (percent: number) => void
+): Promise<AnalysisResult> {
+  const audioCtx = new AudioContext();
+  let decoded: AudioBuffer;
+  try {
+    decoded = await audioCtx.decodeAudioData(await file.arrayBuffer());
+  } finally {
+    await audioCtx.close();
+  }
+
+  const scores = await averageSoundScores(await renderMono16k(decoded), onModelProgress);
+
   const channelData: Float32Array[] = [];
-  for (let c = 0; c < decodedData.numberOfChannels; c++) {
-    channelData.push(decodedData.getChannelData(c));
+  for (let c = 0; c < decoded.numberOfChannels; c++) {
+    channelData.push(decoded.getChannelData(c));
   }
-  const loudness = computeLoudnessMetrics(channelData, decodedData.sampleRate);
-
-  await audioCtx.close();
 
   return {
-    vector: extractedVector,
-    vectorPreview,
-    tags,
-    description,
-    matches,
-    energy,
-    duration: decodedData.duration,
-    sampleRate: decodedData.sampleRate,
+    topSounds: scores.slice(0, TOP_SOUNDS).map((s) => ({
+      name: soundNameRu(s.label),
+      percent: Math.round(s.score * 100),
+    })),
+    tags: buildTags(scores),
+    description: buildDescription(scores),
+    duration: decoded.duration,
+    sampleRate: decoded.sampleRate,
     fileName: file.name,
     fileSize: formatFileSize(file.size),
-    loudness,
+    loudness: computeLoudnessMetrics(channelData, decoded.sampleRate),
   };
 }
