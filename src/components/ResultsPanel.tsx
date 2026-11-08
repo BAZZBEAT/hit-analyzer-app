@@ -1,10 +1,9 @@
 import { type AnalysisResult } from "@/lib/audioAnalyzer";
-import { Cpu, Tag, PenLine, Flame, Clock, AudioWaveform, HardDrive, Lock } from "lucide-react";
+import { Cpu, Tag, PenLine, Flame, Clock, AudioWaveform, HardDrive } from "lucide-react";
 import LoudnessMeter from "@/components/LoudnessMeter";
 
 interface ResultsPanelProps {
   result: AnalysisResult;
-  onPremiumFeature: (featureName: string) => void;
 }
 
 function GenreIcon({ genre }: { genre: string }) {
@@ -21,7 +20,7 @@ function GenreIcon({ genre }: { genre: string }) {
   );
 }
 
-export default function ResultsPanel({ result, onPremiumFeature }: ResultsPanelProps) {
+export default function ResultsPanel({ result }: ResultsPanelProps) {
   return (
     <div className="space-y-4 animate-[fadeIn_0.5s_ease-out]">
       {/* Metadata strip */}
@@ -45,7 +44,7 @@ export default function ResultsPanel({ result, onPremiumFeature }: ResultsPanelP
       </div>
 
       {/* Professional Loudness Meter (Youlean Style) */}
-      <LoudnessMeter metrics={result.loudness} onPremiumFeature={onPremiumFeature} />
+      <LoudnessMeter metrics={result.loudness} />
 
       {/* Vector */}
       <div className="rounded-2xl bg-white/[0.03] p-5 ring-1 ring-white/10">
@@ -96,13 +95,6 @@ export default function ResultsPanel({ result, onPremiumFeature }: ResultsPanelP
           <h3 className="text-sm font-semibold text-white/90">Рецензия</h3>
         </div>
         <p className="text-sm italic text-white/60 leading-relaxed">{result.description}</p>
-        <button
-          onClick={() => onPremiumFeature("Full AI Review")}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-cyan-300"
-        >
-          <Lock className="h-3.5 w-3.5" />
-          Полный ИИ-разбор (Premium)
-        </button>
       </div>
 
       {/* Matches */}
@@ -141,13 +133,6 @@ export default function ResultsPanel({ result, onPremiumFeature }: ResultsPanelP
             </div>
           ))}
         </div>
-        <button
-          onClick={() => onPremiumFeature("Advanced Match")}
-          className="mt-4 inline-flex items-center gap-2 rounded-xl bg-white/5 px-4 py-2 text-xs font-medium text-white/50 ring-1 ring-white/10 transition-all hover:bg-white/10 hover:text-cyan-300"
-        >
-          <Lock className="h-3.5 w-3.5" />
-          Расширенное сравнение (Premium)
-        </button>
       </div>
     </div>
   );
